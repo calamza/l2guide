@@ -1,0 +1,20 @@
+services:
+  l2guide-bot:
+    build: .
+    container_name: l2guide-bot
+    restart: unless-stopped
+    ports:
+      - "3100:3100"
+    env_file:
+      - .env
+    volumes:
+      - ./data/kb:/app/data/kb
+      # Montar el datapack del game server (read-only)
+      # Ajustá la ruta según donde esté tu game server
+      - /path/to/gameserver/datapack:/datapack:ro
+    networks:
+      - confiber-net
+
+networks:
+  confiber-net:
+    external: true
