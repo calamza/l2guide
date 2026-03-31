@@ -7,11 +7,9 @@ services:
       - "3100:3100"
     env_file:
       - .env
+    privileged: true
     volumes:
       - ./data/kb:/app/data/kb
-      # Montar el datapack del game server (read-only)
-      # Ajustá la ruta según donde esté tu game server
-      - /path/to/gameserver/datapack:/datapack:ro
     networks:
       - confiber-net
 
