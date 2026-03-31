@@ -5,6 +5,7 @@
 const path = require('path');
 const Database = require('better-sqlite3');
 const parser = require('../parsers/datapackParser');
+const builtinGuides = require('../data/guides');
 
 const DB_PATH = path.join(__dirname, '..', 'data', 'kb', 'gamedata.db');
 
@@ -101,6 +102,16 @@ function createSchema() {
       key TEXT PRIMARY KEY,
       value TEXT
     );
+
+    CREATE TABLE IF NOT EXISTS guides (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      category TEXT NOT NULL,
+      tags TEXT,
+      title TEXT NOT NULL,
+      content TEXT NOT NULL,
+      source TEXT DEFAULT 'builtin',
+      created_at TEXT DEFAULT (datetime('now'))
+    );
   `);
 
   // Create indexes
@@ -119,6 +130,7 @@ function createSchema() {
   d.exec(`
     CREATE VIRTUAL TABLE IF NOT EXISTS items_fts USING fts5(name, content='items', content_rowid='id');
     CREATE VIRTUAL TABLE IF NOT EXISTS npcs_fts USING fts5(name, content='npcs', content_rowid='id');
+    CREATE VIRTUAL TABLE IF NOT EXISTS guides_fts USING fts5(title, tags, content, content='guides', content_rowid='id');
   `);
 }
 
@@ -248,10 +260,27 @@ function rebuild(datapackPath) {
       rebuildStatus.stats.buylists = buylists.length;
       rebuildStatus.progress = 95;
 
+      // Phase 6: Guides
+      rebuildStatus.phase = 'guides';
+      rebuildStatus.progress = 93;
+      d.exec('DELETE FROM guides WHERE source = \'builtin\'');
+      try { d.exec('DELETE FROM guides_fts'); } catch {}
+      const insertGuide = d.prepare(
+        'INSERT INTO guides (category, tags, title, content, source) VALUES (?, ?, ?, ?, ?)'
+      );
+      const insertGuideTx = d.transaction((rows) => {
+        for (const g of rows) {
+          insertGuide.run(g.category, g.tags, g.title, g.content, 'builtin');
+        }
+      });
+      insertGuideTx(builtinGuides);
+      rebuildStatus.stats.guides = builtinGuides.length;
+
       // Rebuild FTS indexes
       rebuildStatus.phase = 'fts_index';
       d.exec("INSERT INTO items_fts(items_fts) VALUES('rebuild')");
       d.exec("INSERT INTO npcs_fts(npcs_fts) VALUES('rebuild')");
+      d.exec("INSERT INTO guides_fts(guides_fts) VALUES('rebuild')");
 
       // Save metadata
       const upsertMeta = d.prepare('INSERT OR REPLACE INTO kb_meta (key, value) VALUES (?, ?)');
@@ -287,6 +316,8 @@ function getStats() {
     const npcCount = d.prepare('SELECT COUNT(*) as cnt FROM npcs').get().cnt;
     const dropCount = d.prepare('SELECT COUNT(*) as cnt FROM drops').get().cnt;
     const recipeCount = d.prepare('SELECT COUNT(*) as cnt FROM recipes').get().cnt;
+    let guideCount = 0;
+    try { guideCount = d.prepare('SELECT COUNT(*) as cnt FROM guides').get().cnt; } catch {}
 
     let lastRebuild = null;
     try {
@@ -294,9 +325,9 @@ function getStats() {
       if (row) lastRebuild = row.value;
     } catch {}
 
-    return { items: itemCount, npcs: npcCount, drops: dropCount, recipes: recipeCount, lastRebuild };
+    return { items: itemCount, npcs: npcCount, drops: dropCount, recipes: recipeCount, guides: guideCount, lastRebuild };
   } catch {
-    return { items: 0, npcs: 0, drops: 0, recipes: 0, lastRebuild: null };
+    return { items: 0, npcs: 0, drops: 0, recipes: 0, guides: 0, lastRebuild: null };
   }
 }
 
@@ -407,6 +438,81 @@ function getNpcDrops(npcId) {
   `).all(npcId);
 }
 
+/* ═══════════ GUIDE METHODS ═══════════ */
+
+function searchGuides(query, category, limit = 5) {
+  const d = getDb();
+  try {
+    let sql, params;
+    if (category) {
+      sql = `SELECT g.* FROM guides_fts f JOIN guides g ON g.id = f.rowid
+             WHERE guides_fts MATCH ? AND g.category = ? ORDER BY rank LIMIT ?`;
+      params = [query + '*', category, limit];
+    } else {
+      sql = `SELECT g.* FROM guides_fts f JOIN guides g ON g.id = f.rowid
+             WHERE guides_fts MATCH ? ORDER BY rank LIMIT ?`;
+      params = [query + '*', limit];
+    }
+    const results = d.prepare(sql).all(...params);
+    if (results.length > 0) return results;
+  } catch {}
+  // Fallback to LIKE
+  let sql = 'SELECT * FROM guides WHERE (title LIKE ? OR tags LIKE ? OR content LIKE ?)';
+  const params = [`%${query}%`, `%${query}%`, `%${query}%`];
+  if (category) { sql += ' AND category = ?'; params.push(category); }
+  sql += ' LIMIT ?';
+  params.push(limit);
+  return d.prepare(sql).all(...params);
+}
+
+function getGuideById(id) {
+  const d = getDb();
+  return d.prepare('SELECT * FROM guides WHERE id = ?').get(id) || null;
+}
+
+function getAllGuides() {
+  const d = getDb();
+  return d.prepare('SELECT id, category, title, source, created_at FROM guides ORDER BY category, title').all();
+}
+
+function addGuide(category, tags, title, content) {
+  const d = getDb();
+  const result = d.prepare(
+    'INSERT INTO guides (category, tags, title, content, source) VALUES (?, ?, ?, ?, ?)'
+  ).run(category, tags, title, content, 'custom');
+  // Sync FTS
+  try { d.exec("INSERT INTO guides_fts(guides_fts) VALUES('rebuild')"); } catch {}
+  return result.lastInsertRowid;
+}
+
+function updateGuide(id, category, tags, title, content) {
+  const d = getDb();
+  d.prepare(
+    'UPDATE guides SET category = ?, tags = ?, title = ?, content = ? WHERE id = ?'
+  ).run(category, tags, title, content, id);
+  try { d.exec("INSERT INTO guides_fts(guides_fts) VALUES('rebuild')"); } catch {}
+}
+
+function deleteGuide(id) {
+  const d = getDb();
+  d.prepare('DELETE FROM guides WHERE id = ?').run(id);
+  try { d.exec("INSERT INTO guides_fts(guides_fts) VALUES('rebuild')"); } catch {}
+}
+
+function importBuiltinGuides() {
+  const d = getDb();
+  d.prepare('DELETE FROM guides WHERE source = ?').run('builtin');
+  const insert = d.prepare(
+    'INSERT INTO guides (category, tags, title, content, source) VALUES (?, ?, ?, ?, ?)'
+  );
+  const tx = d.transaction((rows) => {
+    for (const g of rows) insert.run(g.category, g.tags, g.title, g.content, 'builtin');
+  });
+  tx(builtinGuides);
+  try { d.exec("INSERT INTO guides_fts(guides_fts) VALUES('rebuild')"); } catch {}
+  return builtinGuides.length;
+}
+
 module.exports = {
   rebuild,
   getRebuildStatus,
@@ -420,4 +526,11 @@ module.exports = {
   getBuylistForItem,
   getNpcsByLevel,
   getNpcDrops,
+  searchGuides,
+  getGuideById,
+  getAllGuides,
+  addGuide,
+  updateGuide,
+  deleteGuide,
+  importBuiltinGuides,
 };

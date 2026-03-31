@@ -77,4 +77,71 @@ router.post('/clear-session', (req, res) => {
   res.json({ ok: true });
 });
 
+/* ═══════════ GUIDES ═══════════ */
+
+router.get('/guides', (req, res) => {
+  try {
+    const guides = kb.getAllGuides();
+    res.json(guides);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/guides/:id', (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) return res.status(400).json({ error: 'ID inválido' });
+  const guide = kb.getGuideById(id);
+  if (!guide) return res.status(404).json({ error: 'Guía no encontrada' });
+  res.json(guide);
+});
+
+router.post('/guides', (req, res) => {
+  const { category, tags, title, content } = req.body;
+  if (!category || !title || !content) {
+    return res.status(400).json({ error: 'category, title y content son requeridos.' });
+  }
+  try {
+    const id = kb.addGuide(category, tags || '', title, content);
+    res.json({ id, message: 'Guía creada.' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.put('/guides/:id', (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) return res.status(400).json({ error: 'ID inválido' });
+  const { category, tags, title, content } = req.body;
+  if (!category || !title || !content) {
+    return res.status(400).json({ error: 'category, title y content son requeridos.' });
+  }
+  try {
+    kb.updateGuide(id, category, tags || '', title, content);
+    res.json({ message: 'Guía actualizada.' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.delete('/guides/:id', (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) return res.status(400).json({ error: 'ID inválido' });
+  try {
+    kb.deleteGuide(id);
+    res.json({ message: 'Guía eliminada.' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/guides/import-defaults', (req, res) => {
+  try {
+    const count = kb.importBuiltinGuides();
+    res.json({ message: `Se importaron ${count} guías predefinidas.`, count });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

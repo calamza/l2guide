@@ -154,6 +154,19 @@ function searchMonstersByLevel(minLevel, maxLevel) {
   }));
 }
 
+/**
+ * Search guides by query text and optional category/class.
+ */
+function searchGuides(query, category) {
+  const results = kb.searchGuides(query, category, 5);
+  return results.map(g => ({
+    id: g.id,
+    category: g.category,
+    title: g.title,
+    content: g.content,
+  }));
+}
+
 module.exports = {
   searchItems,
   getDropSources,
@@ -162,4 +175,5 @@ module.exports = {
   getOfflineShops,
   getPlayerInfo,
   searchMonstersByLevel,
+  searchGuides,
 };

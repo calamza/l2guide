@@ -45,6 +45,7 @@ Cuando un jugador pregunte cómo conseguir algo:
 3. Verificá si se puede craftear (receta, ingredientes)
 4. Consultá las tiendas offline por vendedores actuales
 5. Verificá tiendas de NPC
+6. Si preguntan por recomendaciones de equipo, builds, o qué usar para su clase, buscá en las guías
 
 Consideraciones importantes:
 - Tené en cuenta el nivel y clase del jugador (si se conoce) al recomendar zonas de caza
@@ -53,6 +54,7 @@ Consideraciones importantes:
 - Sugerí el approach más eficiente según la situación
 - Los chance de drop efectivo se calculan como: (group_chance × item_chance) / 100
 - Spoil es una mecánica exclusiva de la clase Bounty Hunter/Fortune Seeker
+- Para preguntas sobre builds, equipamiento recomendado, spots de caza, PvP o estrategia, usá la herramienta search_guides
 
 Hablá en español (la comunidad del servidor es hispana). Sé amigable pero conciso.
 Formateá los precios en adena. Usá bullet points para listas.
@@ -158,6 +160,21 @@ const TOOLS = [
       }
     }
   },
+  {
+    type: 'function',
+    function: {
+      name: 'search_guides',
+      description: 'Buscar guías tácticas y estratégicas del juego. Útil para recomendaciones de equipamiento por clase, builds, spots de caza, PvP, Olympiad, economía, subclass y más.',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: 'Texto a buscar (ej: gladiator, equipo S-grade, PvP, spots nivel 60)' },
+          category: { type: 'string', description: 'Categoría opcional: progresion, clase, caza, pvp, economia, subclass, enchant, sa', enum: ['progresion', 'clase', 'caza', 'pvp', 'economia', 'subclass', 'enchant', 'sa'] }
+        },
+        required: ['query']
+      }
+    }
+  },
 ];
 
 /**
@@ -179,6 +196,8 @@ async function executeTool(name, args) {
       return queryEngine.getNpcShops(args.item_id, args.item_name);
     case 'search_monsters_by_level':
       return queryEngine.searchMonstersByLevel(args.min_level, args.max_level);
+    case 'search_guides':
+      return queryEngine.searchGuides(args.query, args.category);
     default:
       return { error: `Tool "${name}" not found` };
   }
@@ -287,6 +306,7 @@ async function chatRuleBased(userMessage, playerContext) {
   const isShopQuestion = /comprar|vende|tienda|shop|precio/.test(msg);
   const isPlayerQuestion = /info|personaje|nivel|level|clase|class/.test(msg);
   const isHuntQuestion = /cazar|hunt|zona|mobs?|monstruos?|exp|grind/.test(msg);
+  const isGuideQuestion = /gu(i|í)a|build|equipamiento|equipo|recomend|mejor|pvp|olympiad|subclass|enchant|sa |habilidad|spot|farm|econom/.test(msg);
 
   // Extract potential item/NPC name (remove common words)
   const cleanMsg = msg
@@ -394,6 +414,23 @@ async function chatRuleBased(userMessage, playerContext) {
       parts.push(`• Clan: ${info.clan || 'Sin clan'}${info.ally ? ' | Alianza: ' + info.ally : ''}`);
       parts.push(`• PvP: ${info.pvpKills} | PK: ${info.pkKills}`);
       parts.push(`• Estado: ${info.online ? '🟢 Online' : '⚫ Offline'}`);
+    }
+  }
+
+  // Guide search (fallback: try guides if nothing else matched, or if explicitly a guide question)
+  if (parts.length === 0 || isGuideQuestion) {
+    const guideQuery = cleanMsg.length >= 2 ? cleanMsg : msg;
+    const guides = queryEngine.searchGuides(guideQuery);
+    if (Array.isArray(guides) && guides.length > 0) {
+      if (parts.length > 0) parts.push('');
+      parts.push('📖 **Guías relacionadas:**');
+      for (const g of guides.slice(0, 3)) {
+        parts.push('');
+        parts.push(`**${g.title}**`);
+        // Show first 500 chars of content
+        const preview = g.content.length > 500 ? g.content.substring(0, 500) + '...' : g.content;
+        parts.push(preview);
+      }
     }
   }
 
