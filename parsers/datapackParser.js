@@ -14,9 +14,24 @@ const xmlParser = new XMLParser({
 });
 
 function readXmlFiles(dir) {
-  if (!fs.existsSync(dir)) return [];
-  return fs.readdirSync(dir)
-    .filter(f => f.endsWith('.xml'))
+  console.log(`[Parser] Buscando XMLs en: ${dir}`);
+  if (!fs.existsSync(dir)) {
+    console.warn(`[Parser] ⚠ Directorio NO existe: ${dir}`);
+    // Try listing parent to help diagnose
+    const parent = path.dirname(dir);
+    if (fs.existsSync(parent)) {
+      console.log(`[Parser] Contenido de ${parent}:`, fs.readdirSync(parent));
+    } else {
+      const grandparent = path.dirname(parent);
+      if (fs.existsSync(grandparent)) {
+        console.log(`[Parser] Contenido de ${grandparent}:`, fs.readdirSync(grandparent));
+      }
+    }
+    return [];
+  }
+  const xmlFiles = fs.readdirSync(dir).filter(f => f.endsWith('.xml'));
+  console.log(`[Parser] Encontrados ${xmlFiles.length} archivos XML en ${dir}`);
+  return xmlFiles
     .map(f => {
       try {
         const content = fs.readFileSync(path.join(dir, f), 'utf-8');
@@ -31,6 +46,11 @@ function readXmlFiles(dir) {
 
 /* ═══════════ ITEMS ═══════════ */
 function parseItems(datapackPath) {
+  console.log(`[Parser] parseItems llamado con datapackPath: ${datapackPath}`);
+  console.log(`[Parser] datapackPath existe: ${fs.existsSync(datapackPath)}`);
+  if (fs.existsSync(datapackPath)) {
+    console.log(`[Parser] Contenido raíz de datapack:`, fs.readdirSync(datapackPath));
+  }
   const dir = path.join(datapackPath, 'data', 'stats', 'items');
   const parsed = readXmlFiles(dir);
   const items = [];
