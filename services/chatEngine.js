@@ -3,6 +3,7 @@
  * Gestiona sesiones, tool calling, y genera respuestas contextualizadas.
  */
 const queryEngine = require('./queryEngine');
+const contentFilter = require('./contentFilter');
 
 let openai = null;
 const MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
@@ -448,16 +449,30 @@ async function chatRuleBased(userMessage, playerContext) {
 }
 
 /**
- * Main chat function — tries OpenAI first, falls back to rule-based
+ * Main chat function — filters content, tries OpenAI first, falls back to rule-based
  */
 async function chat(sessionId, userMessage, playerContext) {
+  // Content filter: check for offensive or off-topic messages
+  const filterResult = contentFilter.analyzeMessage(userMessage);
+  if (!filterResult.allowed) {
+    return {
+      response: filterResult.flagReason === 'offensive'
+        ? '🚫 Tu mensaje contiene contenido inapropiado. No puedo continuar esta conversación.'
+        : '⚠️ Solo puedo responder preguntas relacionadas con Lineage 2. Probá preguntarme sobre items, drops, builds, spots de caza, etc.',
+      engine: 'filter',
+      flagged: true,
+      flagReason: filterResult.flagReason,
+      flagDetail: filterResult.detail,
+    };
+  }
+
   // Try OpenAI first
   const aiResponse = await chatWithOpenAI(sessionId, userMessage, playerContext);
-  if (aiResponse) return { response: aiResponse, engine: 'openai' };
+  if (aiResponse) return { response: aiResponse, engine: 'openai', flagged: false, flagReason: null };
 
   // Fallback to rule-based
   const rbResponse = await chatRuleBased(userMessage, playerContext);
-  return { response: rbResponse, engine: 'rule-based' };
+  return { response: rbResponse, engine: 'rule-based', flagged: false, flagReason: null };
 }
 
 /**

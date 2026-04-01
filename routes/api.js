@@ -28,6 +28,9 @@ router.post('/chat', async (req, res) => {
       sessionId: sid,
       response: result.response,
       engine: result.engine,
+      flagged: result.flagged || false,
+      flagReason: result.flagReason || null,
+      flagDetail: result.flagDetail || null,
     });
   } catch (err) {
     console.error('[API] Chat error:', err);
