@@ -167,6 +167,27 @@ function searchGuides(query, category) {
   }));
 }
 
+/**
+ * Buscar items en la tienda del servidor (Memories Coin).
+ * Soporta búsqueda por nombre, categoría y/o grado.
+ */
+async function searchShopItems(query, category, grade) {
+  try {
+    let results;
+    if (query) {
+      results = await gameDb.searchShopItems(query);
+    } else {
+      results = await gameDb.getShopByCategory(category, grade);
+    }
+    if (!results || results.length === 0) {
+      return { message: 'No se encontraron items en la tienda del servidor para esa búsqueda.' };
+    }
+    return results;
+  } catch (err) {
+    return { error: 'No se pudo consultar la tienda del servidor: ' + err.message };
+  }
+}
+
 module.exports = {
   searchItems,
   getDropSources,
@@ -176,4 +197,5 @@ module.exports = {
   getPlayerInfo,
   searchMonstersByLevel,
   searchGuides,
+  searchShopItems,
 };

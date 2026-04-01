@@ -153,4 +153,79 @@ function getLocationName(x, y) {
   return closest;
 }
 
-module.exports = { getPlayerInfo, getOfflineShops, getAccountCharacters };
+/**
+ * Buscar items del shop in-game (Memories Coin) por nombre
+ */
+async function searchShopItems(query) {
+  let conn;
+  try {
+    conn = await gamePool.getConnection();
+    const rows = await conn.query(
+      `SELECT i.item_id, i.item_name, i.price_coin, i.enchant_level, i.item_count,
+              i.grade, c.name AS category_name
+       FROM game_shop_items i
+       JOIN game_shop_categories c ON c.id = i.category_id
+       WHERE i.active = 1 AND c.active = 1
+         AND i.item_name LIKE ?
+       ORDER BY c.sort_order ASC, i.sort_order ASC
+       LIMIT 20`,
+      [`%${query}%`]
+    );
+    return rows.map(r => ({
+      itemId: r.item_id,
+      name: r.item_name,
+      priceCoins: Number(r.price_coin),
+      enchant: r.enchant_level || 0,
+      count: r.item_count || 1,
+      grade: r.grade || 'none',
+      category: r.category_name,
+    }));
+  } catch (err) {
+    console.error('[GameDB] Error buscando shop items:', err.message);
+    return [];
+  } finally {
+    if (conn) conn.release();
+  }
+}
+
+/**
+ * Obtener items del shop filtrados por categoría y/o grado
+ */
+async function getShopByCategory(category, grade) {
+  let conn;
+  try {
+    conn = await gamePool.getConnection();
+    let sql = `SELECT i.item_id, i.item_name, i.price_coin, i.enchant_level, i.item_count,
+                      i.grade, c.name AS category_name
+               FROM game_shop_items i
+               JOIN game_shop_categories c ON c.id = i.category_id
+               WHERE i.active = 1 AND c.active = 1`;
+    const params = [];
+    if (category) {
+      sql += ' AND c.name LIKE ?';
+      params.push(`%${category}%`);
+    }
+    if (grade) {
+      sql += ' AND i.grade = ?';
+      params.push(grade);
+    }
+    sql += ' ORDER BY c.sort_order ASC, i.sort_order ASC LIMIT 30';
+    const rows = await conn.query(sql, params);
+    return rows.map(r => ({
+      itemId: r.item_id,
+      name: r.item_name,
+      priceCoins: Number(r.price_coin),
+      enchant: r.enchant_level || 0,
+      count: r.item_count || 1,
+      grade: r.grade || 'none',
+      category: r.category_name,
+    }));
+  } catch (err) {
+    console.error('[GameDB] Error obteniendo shop por categoría:', err.message);
+    return [];
+  } finally {
+    if (conn) conn.release();
+  }
+}
+
+module.exports = { getPlayerInfo, getOfflineShops, getAccountCharacters, searchShopItems, getShopByCategory };

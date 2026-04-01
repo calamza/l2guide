@@ -57,6 +57,16 @@ Consideraciones importantes:
 - Spoil es una mecánica exclusiva de la clase Bounty Hunter/Fortune Seeker
 - Para preguntas sobre builds, equipamiento recomendado, spots de caza, PvP o estrategia, usá la herramienta search_guides
 
+Tienda del servidor (Memories Coin):
+- El servidor tiene una tienda in-game donde los jugadores compran items con Memories Coin
+- Memories Coin es la moneda premium del servidor, se compra desde la web con dinero real
+- SIEMPRE que un jugador pregunte cómo conseguir un item, cómo mejorar su equipo, qué arma/armadura le conviene, o cualquier consulta donde un item del shop pueda ser relevante, usá la herramienta search_shop_items para verificar si está disponible en la tienda
+- Si el item está en la tienda, mencionalo como una opción conveniente y rápida, indicando el precio en Memories Coin
+- Si preguntan por builds o recomendaciones de equipo, buscá en el shop items de esa categoría/grado que puedan servir
+- Sé natural al recomendar: no seas agresivo ni insistente, pero siempre mencioná la opción de tienda cuando sea relevante
+- Ejemplo: "También podés conseguirlo directamente en la tienda del servidor por X Memories Coin, que es la forma más rápida."
+- Si preguntan cómo conseguir Memories Coin, explicá que se compran desde la página web del servidor
+
 Hablá en español (la comunidad del servidor es hispana). Sé amigable pero conciso.
 Formateá los precios en adena. Usá bullet points para listas.
 No uses markdown headers (##), solo texto plano con bullets y negritas **así**.`;
@@ -176,6 +186,21 @@ const TOOLS = [
       }
     }
   },
+  {
+    type: 'function',
+    function: {
+      name: 'search_shop_items',
+      description: 'Buscar items disponibles en la tienda del servidor, comprables con Memories Coin. Usá esta herramienta siempre que el jugador pregunte cómo conseguir algo, qué equipamiento usar, o cómo mejorar. Permite buscar por nombre, categoría o grado.',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: 'Nombre del item a buscar en la tienda (ej: Soul Bow, Dynasty)' },
+          category: { type: 'string', description: 'Categoría: Armas, Armaduras, Joyería, Enchants, Consumibles, Misceláneos' },
+          grade: { type: 'string', description: 'Grado del item: D, C, B, A, S, S80, S84', enum: ['D', 'C', 'B', 'A', 'S', 'S80', 'S84'] }
+        }
+      }
+    }
+  },
 ];
 
 /**
@@ -199,6 +224,8 @@ async function executeTool(name, args) {
       return queryEngine.searchMonstersByLevel(args.min_level, args.max_level);
     case 'search_guides':
       return queryEngine.searchGuides(args.query, args.category);
+    case 'search_shop_items':
+      return await queryEngine.searchShopItems(args.query, args.category, args.grade);
     default:
       return { error: `Tool "${name}" not found` };
   }
@@ -392,6 +419,21 @@ async function chatRuleBased(userMessage, playerContext) {
       }
     }
 
+    // Shop del servidor (Memories Coin)
+    try {
+      const shopItems = await queryEngine.searchShopItems(item.name);
+      if (Array.isArray(shopItems) && shopItems.length > 0) {
+        parts.push('');
+        parts.push('🛒 **Disponible en la Tienda del Servidor:**');
+        for (const si of shopItems) {
+          const enchStr = si.enchant > 0 ? ` +${si.enchant}` : '';
+          const countStr = si.count > 1 ? ` x${si.count}` : '';
+          parts.push(`• ${si.name}${enchStr}${countStr} — ${si.priceCoins} Memories Coin`);
+        }
+        parts.push('💡 Podés comprar Memories Coin desde la web del servidor.');
+      }
+    } catch {}
+
   } else if (isHuntQuestion && playerContext) {
     // Hunt zone recommendation
     const lvl = playerContext.level || 1;
@@ -432,6 +474,39 @@ async function chatRuleBased(userMessage, playerContext) {
         const preview = g.content.length > 500 ? g.content.substring(0, 500) + '...' : g.content;
         parts.push(preview);
       }
+    }
+
+    // Si es pregunta de guía/recomendación, buscar items relevantes en el shop
+    if (isGuideQuestion) {
+      try {
+        // Intentar buscar en shop por el query o por grado/categoría mencionados
+        const gradeMatch = msg.match(/\b(S84|S80|S|A|B|C|D)\b(?:-[Gg]rade)?/i);
+        const catMatch = msg.match(/\b(arma|weapon|armadura|armor|joya|jewel|enchant|consumible|pocion)\b/i);
+        const shopGrade = gradeMatch ? gradeMatch[1].toUpperCase() : null;
+        let shopCategory = null;
+        if (catMatch) {
+          const c = catMatch[1].toLowerCase();
+          if (/arma|weapon/.test(c)) shopCategory = 'Armas';
+          else if (/armadura|armor/.test(c)) shopCategory = 'Armaduras';
+          else if (/joya|jewel/.test(c)) shopCategory = 'Joyería';
+          else if (/enchant/.test(c)) shopCategory = 'Enchants';
+          else if (/consumible|pocion/.test(c)) shopCategory = 'Consumibles';
+        }
+        const shopResults = await queryEngine.searchShopItems(
+          (!shopCategory && !shopGrade && cleanMsg.length >= 2) ? cleanMsg : null,
+          shopCategory, shopGrade
+        );
+        if (Array.isArray(shopResults) && shopResults.length > 0) {
+          parts.push('');
+          parts.push('🛒 **Items relacionados en la Tienda del Servidor:**');
+          for (const si of shopResults.slice(0, 5)) {
+            const enchStr = si.enchant > 0 ? ` +${si.enchant}` : '';
+            const countStr = si.count > 1 ? ` x${si.count}` : '';
+            parts.push(`• ${si.name}${enchStr}${countStr} — ${si.priceCoins} Memories Coin (${si.category})`);
+          }
+          parts.push('💡 Podés comprar Memories Coin desde la web del servidor.');
+        }
+      } catch {}
     }
   }
 
