@@ -38,7 +38,12 @@ const SERVER_NAME = process.env.SERVER_NAME || 'Lineage 2 - Memories';
 const SYSTEM_PROMPT = `Sos el Game Guide Bot del servidor privado de Lineage II "${SERVER_NAME}" (crónica High Five).
 Tu rol es ayudar a los jugadores a encontrar items, equipamiento, información de quests, y guiarlos sobre cómo obtener lo que necesitan.
 
-Tenés acceso a la base de datos completa del juego. Usá las herramientas disponibles para buscar items, encontrar de dónde dropean, verificar recetas y consultar tiendas.
+Tenés acceso a la base de datos completa del juego. Usá las herramientas disponibles para buscar items, encontrar de dónde dropean, verificar recetas, consultar tiendas y buscar información de quests.
+
+Cuando un jugador pregunte sobre quests (subclass, noblesse, hellbound, acceso a raids, cambio de clase, etc.):
+1. Usá search_guides con category "quest" para encontrar guías detalladas de quests
+2. Dá información precisa: nivel requerido, NPC de inicio, ubicación, pasos principales
+3. Mencioná si la quest es requisito para otra cosa importante
 
 Cuando un jugador pregunte cómo conseguir algo:
 1. Buscá el item para confirmar que existe y obtener su ID
@@ -175,12 +180,12 @@ const TOOLS = [
     type: 'function',
     function: {
       name: 'search_guides',
-      description: 'Buscar guías tácticas y estratégicas del juego. Útil para recomendaciones de equipamiento por clase, builds, spots de caza, PvP, Olympiad, economía, subclass y más.',
+      description: 'Buscar guías tácticas y estratégicas del juego. Útil para recomendaciones de equipamiento por clase, builds, spots de caza, PvP, Olympiad, economía, subclass, quests y más. Usá categoría "quest" para buscar información sobre quests específicas, cómo desbloquear subclass, noblesse, acceso a raids, Hellbound, Seven Signs, cambio de clase, etc.',
       parameters: {
         type: 'object',
         properties: {
-          query: { type: 'string', description: 'Texto a buscar (ej: gladiator, equipo S-grade, PvP, spots nivel 60)' },
-          category: { type: 'string', description: 'Categoría opcional: progresion, clase, caza, pvp, economia, subclass, enchant, sa', enum: ['progresion', 'clase', 'caza', 'pvp', 'economia', 'subclass', 'enchant', 'sa'] }
+          query: { type: 'string', description: 'Texto a buscar (ej: gladiator, subclass, noblesse, hellbound, antharas, quest fates whisper)' },
+          category: { type: 'string', description: 'Categoría opcional: progresion, clase, caza, pvp, economia, subclass, enchant, sa, quest', enum: ['progresion', 'clase', 'caza', 'pvp', 'economia', 'subclass', 'enchant', 'sa', 'quest'] }
         },
         required: ['query']
       }

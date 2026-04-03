@@ -6,6 +6,7 @@ const path = require('path');
 const Database = require('better-sqlite3');
 const parser = require('../parsers/datapackParser');
 const builtinGuides = require('../data/guides');
+const questGuides = require('../data/questGuides');
 
 const DB_PATH = path.join(__dirname, '..', 'data', 'kb', 'gamedata.db');
 
@@ -273,8 +274,9 @@ function rebuild(datapackPath) {
           insertGuide.run(g.category, g.tags, g.title, g.content, 'builtin');
         }
       });
-      insertGuideTx(builtinGuides);
-      rebuildStatus.stats.guides = builtinGuides.length;
+      const allGuides = [...builtinGuides, ...questGuides];
+      insertGuideTx(allGuides);
+      rebuildStatus.stats.guides = allGuides.length;
 
       // Rebuild FTS indexes
       rebuildStatus.phase = 'fts_index';
@@ -505,12 +507,13 @@ function importBuiltinGuides() {
   const insert = d.prepare(
     'INSERT INTO guides (category, tags, title, content, source) VALUES (?, ?, ?, ?, ?)'
   );
+  const allGuides = [...builtinGuides, ...questGuides];
   const tx = d.transaction((rows) => {
     for (const g of rows) insert.run(g.category, g.tags, g.title, g.content, 'builtin');
   });
-  tx(builtinGuides);
+  tx(allGuides);
   try { d.exec("INSERT INTO guides_fts(guides_fts) VALUES('rebuild')"); } catch {}
-  return builtinGuides.length;
+  return allGuides.length;
 }
 
 module.exports = {
